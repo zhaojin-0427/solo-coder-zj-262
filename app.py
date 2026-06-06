@@ -1,10 +1,11 @@
 import base64
 import io
 import os
+import json
 
 import dash
 import dash_bootstrap_components as dbc
-from dash import dcc, html, Input, Output, State, dash_table, callback_context
+from dash import dcc, html, Input, Output, State, dash_table, callback_context, ALL, MATCH
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -16,7 +17,9 @@ from data_processing import (
     get_opening_distribution, get_win_rate_trend, get_heatmap_data,
     get_level_analysis, get_key_move_analysis, generate_training_advice,
     get_classic_games, compare_players_stats, compare_players_win_trend,
-    compare_players_top_openings, compare_players_styles, compare_players_mistakes
+    compare_players_top_openings, compare_players_styles, compare_players_mistakes,
+    get_game_detail, generate_game_training_advice, get_training_list_summary,
+    get_opening_weaknesses
 )
 from sample_data import generate_sample_data
 
@@ -70,6 +73,7 @@ NAVBAR = dbc.Navbar(
                     dbc.NavItem(dbc.NavLink('📈 胜率分析', href='#winrate')),
                     dbc.NavItem(dbc.NavLink('🎭 棋风聚类', href='#style')),
                     dbc.NavItem(dbc.NavLink('🏆 经典对局', href='#games')),
+                    dbc.NavItem(dbc.NavLink('📋 训练清单', href='#training')),
                     dbc.NavItem(dbc.NavLink('⚔️ 多棋手对比', href='#compare')),
                     dbc.NavItem(dbc.NavLink('💡 训练建议', href='#advice')),
                 ],
@@ -460,16 +464,175 @@ GAMES_SECTION = html.Div(
         html.Div(id='games', style={'position': 'relative', 'top': '-70px'}),
         dbc.Card(
             [
-                dbc.CardHeader('🏆 经典对局复盘', className='bg-light fw-bold'),
+                dbc.CardHeader('🏆 经典对局复盘（点击任意对局查看详情）', className='bg-light fw-bold'),
                 dbc.CardBody(
                     [
-                        dash_table.DataTable(
-                            id='classic-games-table',
-                            page_size=5,
-                            style_table={'overflowX': 'auto'},
-                            style_header={'backgroundColor': '#2c3e50', 'color': 'white', 'fontWeight': 'bold'},
-                            style_cell={'textAlign': 'center', 'padding': '10px'},
-                            style_data={'whiteSpace': 'normal', 'height': 'auto'}
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    [
+                                        dash_table.DataTable(
+                                            id='classic-games-table',
+                                            page_size=6,
+                                            style_table={'overflowX': 'auto', 'cursor': 'pointer'},
+                                            style_header={'backgroundColor': '#2c3e50', 'color': 'white', 'fontWeight': 'bold'},
+                                            style_cell={'textAlign': 'center', 'padding': '8px'},
+                                            style_data={'whiteSpace': 'normal', 'height': 'auto'},
+                                            style_data_conditional=[
+                                                {
+                                                    'if': {'state': 'active'},
+                                                    'backgroundColor': '#d6eaf8',
+                                                    'border': '1px solid #2980b9'
+                                                },
+                                                {
+                                                    'if': {'state': 'selected'},
+                                                    'backgroundColor': '#d6eaf8',
+                                                    'border': '1px solid #2980b9'
+                                                }
+                                            ],
+                                            row_selectable='single',
+                                            selected_rows=[]
+                                        ),
+                                        html.Div(id='game-click-hint', className='text-center text-muted small mt-2',
+                                                 children='👆 点击表格中任意行展开对局详情')
+                                    ],
+                                    md=12,
+                                    lg=7
+                                ),
+                                dbc.Col(
+                                    [
+                                        html.Div(
+                                            id='game-detail-panel',
+                                            children=[
+                                                dbc.Card(
+                                                    [
+                                                        dbc.CardBody(
+                                                            html.Div(
+                                                                '请在左侧选择一局经典对局，此处将展示详细复盘信息与训练建议',
+                                                                className='text-center text-muted py-5'
+                                                            )
+                                                        )
+                                                    ],
+                                                    className='border-secondary'
+                                                )
+                                            ]
+                                        )
+                                    ],
+                                    md=12,
+                                    lg=5,
+                                    className='mt-3 mt-lg-0'
+                                )
+                            ]
+                        )
+                    ]
+                )
+            ],
+            className='mb-4 shadow-sm'
+        )
+    ]
+)
+
+
+TRAINING_LIST_SECTION = html.Div(
+    [
+        html.Div(id='training', style={'position': 'relative', 'top': '-70px'}),
+        dbc.Card(
+            [
+                dbc.CardHeader('📋 训练清单（按当前筛选条件）', className='bg-light fw-bold'),
+                dbc.CardBody(
+                    [
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    [
+                                        html.H6('📊 训练概览', className='fw-bold mb-3'),
+                                        dbc.Row(
+                                            [
+                                                dbc.Col(
+                                                    dbc.Card(
+                                                        dbc.CardBody(
+                                                            [
+                                                                html.Div('今日待复盘对局', className='text-muted small'),
+                                                                html.H4(id='training-total-count', className='text-primary fw-bold mt-1', children='0'),
+                                                                html.Div('局', className='small text-muted')
+                                                            ]
+                                                        ),
+                                                        className='shadow-sm h-100'
+                                                    ),
+                                                    md=6
+                                                ),
+                                                dbc.Col(
+                                                    dbc.Card(
+                                                        dbc.CardBody(
+                                                            [
+                                                                html.Div('开局弱点数量', className='text-muted small'),
+                                                                html.H4(id='training-weakness-count', className='text-warning fw-bold mt-1', children='0'),
+                                                                html.Div('种', className='small text-muted')
+                                                            ]
+                                                        ),
+                                                        className='shadow-sm h-100'
+                                                    ),
+                                                    md=6
+                                                )
+                                            ],
+                                            className='mb-3'
+                                        ),
+                                        dbc.Row(
+                                            [
+                                                dbc.Col(
+                                                    dbc.Card(
+                                                        dbc.CardBody(
+                                                            [
+                                                                html.Div('弱点对局总数', className='text-muted small'),
+                                                                html.H4(id='training-weak-games', className='text-danger fw-bold mt-1', children='0'),
+                                                                html.Div('局', className='small text-muted')
+                                                            ]
+                                                        ),
+                                                        className='shadow-sm h-100'
+                                                    ),
+                                                    md=6
+                                                ),
+                                                dbc.Col(
+                                                    dbc.Card(
+                                                        dbc.CardBody(
+                                                            [
+                                                                html.Div('弱点平均胜率', className='text-muted small'),
+                                                                html.H4(id='training-avg-wr', className='text-info fw-bold mt-1', children='-'),
+                                                                html.Div('%', className='small text-muted')
+                                                            ]
+                                                        ),
+                                                        className='shadow-sm h-100'
+                                                    ),
+                                                    md=6
+                                                )
+                                            ]
+                                        ),
+                                        html.Hr(),
+                                        html.H6('🎯 待练习对局', className='fw-bold mb-2'),
+                                        html.Div(id='training-games-list',
+                                                 children=html.Div('暂无待练习对局，可在「经典对局复盘」区将感兴趣的对局加入训练清单',
+                                                                   className='text-muted small py-3 text-center'))
+                                    ],
+                                    md=12,
+                                    lg=6
+                                ),
+                                dbc.Col(
+                                    [
+                                        html.H6('⚠️ 开局弱点分析（按胜率从低到高）', className='fw-bold mb-3'),
+                                        html.Div(id='training-weakness-table',
+                                                 children=html.Div('暂无足够数据生成开局弱点分析',
+                                                                   className='text-muted small py-5 text-center')),
+                                        html.Hr(),
+                                        html.H6('💡 训练重点建议', className='fw-bold mb-3'),
+                                        html.Div(id='training-focus-advice',
+                                                 children=html.Div('根据当前筛选条件自动生成训练重点',
+                                                                   className='text-muted small py-3 text-center'))
+                                    ],
+                                    md=12,
+                                    lg=6,
+                                    className='mt-4 mt-lg-0'
+                                )
+                            ]
                         )
                     ]
                 )
@@ -638,6 +801,7 @@ app.layout = html.Div(
                 KEY_MOVE_SECTION,
                 STYLE_SECTION,
                 GAMES_SECTION,
+                TRAINING_LIST_SECTION,
                 COMPARE_SECTION,
                 ADVICE_SECTION,
                 html.Footer(
@@ -651,7 +815,9 @@ app.layout = html.Div(
             className='container-fluid px-4'
         ),
         dcc.Store(id='stored-data'),
-        dcc.Store(id='filtered-data')
+        dcc.Store(id='filtered-data'),
+        dcc.Store(id='training-game-ids', data=[]),
+        dcc.Store(id='selected-game-id', data=None)
     ]
 )
 
@@ -1504,6 +1670,471 @@ def update_comparison_view(data, selected_players):
         stats_display.to_dict('records'), stats_cols,
         fig1, fig2, fig3, fig4
     )
+
+
+@app.callback(
+    Output('selected-game-id', 'data'),
+    Output('game-detail-panel', 'children'),
+    Input('classic-games-table', 'derived_virtual_selected_rows'),
+    Input('classic-games-table', 'derived_virtual_data'),
+    State('filtered-data', 'data'),
+    State('player-select', 'value'),
+    State('training-game-ids', 'data'),
+    prevent_initial_call=False
+)
+def render_game_detail(selected_rows, table_data, filtered_data, player, training_ids):
+    if not selected_rows or not table_data or len(selected_rows) == 0:
+        game_id = None
+        panel = dbc.Card(
+            [
+                dbc.CardBody(
+                    html.Div(
+                        '请在左侧选择一局经典对局，此处将展示详细复盘信息与训练建议',
+                        className='text-center text-muted py-5'
+                    )
+                )
+            ],
+            className='border-secondary'
+        )
+        return game_id, panel
+
+    row_idx = selected_rows[0]
+    if row_idx >= len(table_data):
+        game_id = None
+        panel = dbc.Card(
+            [
+                dbc.CardBody(
+                    html.Div(
+                        '请在左侧选择一局经典对局，此处将展示详细复盘信息与训练建议',
+                        className='text-center text-muted py-5'
+                    )
+                )
+            ],
+            className='border-secondary'
+        )
+        return game_id, panel
+
+    selected = table_data[row_idx]
+    game_id = selected.get('game_id')
+
+    df = load_data(uploaded_df=pd.DataFrame(filtered_data)) if filtered_data else None
+    if df is None or len(df) == 0:
+        panel = dbc.Card(
+            [
+                dbc.CardBody(html.Div('数据加载中...', className='text-center text-muted py-4'))
+            ],
+            className='border-secondary'
+        )
+        return game_id, panel
+
+    detail = get_game_detail(df, game_id)
+    if not detail:
+        panel = dbc.Card(
+            [
+                dbc.CardBody(html.Div('未找到该对局的详细信息', className='text-center text-muted py-4'))
+            ],
+            className='border-secondary'
+        )
+        return game_id, panel
+
+    advice_list = generate_game_training_advice(detail, df)
+    already_in_training = game_id in (training_ids or [])
+
+    result_color = 'success' if detail.get('win') else 'danger'
+    result_text = '胜利' if detail.get('win') else '失利'
+
+    panel_children = [
+        dbc.CardHeader(
+            [
+                html.H5(f"🎯 {detail.get('game_id', '')} 对局详情", className='mb-0'),
+                dbc.Badge(
+                    f"{'🏆 ' + result_text}",
+                    color=result_color,
+                    className='ms-2',
+                    style={'fontSize': '0.85rem'}
+                )
+            ],
+            className='bg-light d-flex align-items-center'
+        ),
+        dbc.CardBody(
+            [
+                html.Div(
+                    [
+                        html.H6('👥 棋手信息', className='fw-bold text-primary mb-2'),
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    [
+                                        html.Div([html.Strong('己方：'), detail.get('player', '')]),
+                                        html.Div([html.Strong('等级：'), detail.get('player_level', '')]),
+                                        html.Div([html.Strong('棋风：'), detail.get('player_style', '')], className='text-muted small')
+                                    ],
+                                    md=6
+                                ),
+                                dbc.Col(
+                                    [
+                                        html.Div([html.Strong('对手：'), detail.get('opponent', '')]),
+                                        html.Div([html.Strong('等级：'), detail.get('opponent_level', '')]),
+                                        html.Div([html.Strong('赛事：'), detail.get('competition_type', '')], className='text-muted small')
+                                    ],
+                                    md=6
+                                )
+                            ],
+                            className='mb-2'
+                        ),
+                        html.Div([html.Strong('日期：'), detail.get('match_date', '')], className='small text-muted')
+                    ],
+                    className='mb-3 p-3 bg-light rounded'
+                ),
+
+                html.Div(
+                    [
+                        html.H6('📚 开局体系', className='fw-bold text-info mb-2'),
+                        html.Div([
+                            html.Span('体系：', className='fw-bold'),
+                            dbc.Badge(detail.get('opening_family', ''), color='info', className='me-2'),
+                            html.Span('变例：', className='fw-bold'),
+                            dbc.Badge(detail.get('opening', ''), color='secondary')
+                        ])
+                    ],
+                    className='mb-3'
+                ),
+
+                html.Div(
+                    [
+                        html.H6('⚡ 关键数据', className='fw-bold text-warning mb-2'),
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    dbc.Card(
+                                        dbc.CardBody([
+                                            html.Div('关键胜势手', className='small text-muted'),
+                                            html.H4(str(detail.get('key_winning_moves', 0)), className='text-success fw-bold mb-0')
+                                        ]),
+                                        className='text-center border-success'
+                                    ),
+                                    md=4
+                                ),
+                                dbc.Col(
+                                    dbc.Card(
+                                        dbc.CardBody([
+                                            html.Div('关键失误', className='small text-muted'),
+                                            html.H4(str(detail.get('key_mistakes', 0)), className='text-danger fw-bold mb-0')
+                                        ]),
+                                        className='text-center border-danger'
+                                    ),
+                                    md=4
+                                ),
+                                dbc.Col(
+                                    dbc.Card(
+                                        dbc.CardBody([
+                                            html.Div('总手数', className='small text-muted'),
+                                            html.H4(str(detail.get('total_moves', 0)), className='text-primary fw-bold mb-0')
+                                        ]),
+                                        className='text-center border-primary'
+                                    ),
+                                    md=4
+                                )
+                            ],
+                            className='mb-2'
+                        ),
+                        html.Div(
+                            [
+                                html.Span(f"⚔️ 进攻招法: {detail.get('aggressive_moves', 0)}", className='me-3'),
+                                html.Span(f"🛡️ 防守招法: {detail.get('defensive_moves', 0)}", className='me-3'),
+                                html.Span(f"📊 实空收益: {detail.get('territory_gain', 0)}")
+                            ],
+                            className='small text-muted'
+                        )
+                    ],
+                    className='mb-3'
+                ),
+
+                html.H6('💡 训练建议', className='fw-bold mb-2'),
+                html.Div([_make_advice_card(a) for a in advice_list], className='mb-3'),
+
+                html.Hr(),
+                dbc.Row(
+                    [
+                        dbc.Col(
+                            dbc.Button(
+                                '➕ 加入今日训练清单' if not already_in_training else '✅ 已在训练清单中',
+                                id='add-to-training-btn',
+                                color='primary' if not already_in_training else 'success',
+                                className='w-100',
+                                disabled=already_in_training
+                            ),
+                            md=8
+                        ),
+                        dbc.Col(
+                            dbc.Button(
+                                '⬆️ 跳转到训练清单',
+                                id='goto-training-btn',
+                                color='outline-secondary',
+                                className='w-100',
+                                outline=True
+                            ),
+                            md=4
+                        )
+                    ]
+                ),
+                html.Div(id='add-training-status', className='mt-2 small text-center')
+            ]
+        )
+    ]
+
+    panel = dbc.Card(panel_children, className='border-primary')
+    return game_id, panel
+
+
+@app.callback(
+    Output('training-game-ids', 'data'),
+    Output('add-training-status', 'children'),
+    Input('add-to-training-btn', 'n_clicks'),
+    State('selected-game-id', 'data'),
+    State('training-game-ids', 'data'),
+    prevent_initial_call=True
+)
+def add_game_to_training(n_clicks, game_id, training_ids):
+    if not game_id:
+        return dash.no_update, '❌ 请先选择一局对局'
+
+    training_ids = training_ids or []
+    if game_id in training_ids:
+        return dash.no_update, '⚠️ 该局已在训练清单中'
+
+    new_ids = training_ids + [game_id]
+    return new_ids, f'✅ 已将 {game_id} 加入今日训练清单（共 {len(new_ids)} 局）'
+
+
+@app.callback(
+    Output('training-total-count', 'children'),
+    Output('training-weakness-count', 'children'),
+    Output('training-weak-games', 'children'),
+    Output('training-avg-wr', 'children'),
+    Output('training-games-list', 'children'),
+    Output('training-weakness-table', 'children'),
+    Output('training-focus-advice', 'children'),
+    Input('filtered-data', 'data'),
+    Input('player-select', 'value'),
+    Input('training-game-ids', 'data')
+)
+def update_training_list_view(filtered_data, player, training_ids):
+    empty_result = (
+        '0', '0', '0', '-',
+        html.Div('暂无待练习对局，可在「经典对局复盘」区将感兴趣的对局加入训练清单',
+                 className='text-muted small py-3 text-center'),
+        html.Div('暂无足够数据生成开局弱点分析',
+                 className='text-muted small py-5 text-center'),
+        html.Div('根据当前筛选条件自动生成训练重点',
+                 className='text-muted small py-3 text-center')
+    )
+
+    if not filtered_data:
+        return empty_result
+
+    df = load_data(uploaded_df=pd.DataFrame(filtered_data))
+    if df is None or len(df) == 0:
+        return empty_result
+
+    summary = get_training_list_summary(df, training_ids or [], player)
+    stats = summary.get('stats', {})
+    games = summary.get('games', [])
+    weaknesses = summary.get('weaknesses', pd.DataFrame())
+
+    total_count = str(stats.get('total_training', 0))
+    weak_count = str(stats.get('weak_opening_count', 0))
+    weak_games = str(stats.get('total_weak_games', 0))
+    avg_wr = f"{stats.get('avg_weak_winrate', 0):.1f}" if stats.get('avg_weak_winrate') else '-'
+
+    if games:
+        game_items = []
+        for i, g in enumerate(games):
+            res_color = 'success' if g.get('win') else 'danger'
+            res_icon = '🏆' if g.get('win') else '❌'
+            game_items.append(
+                dbc.ListGroupItem(
+                    [
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    [
+                                        html.Div(
+                                            [
+                                                html.Strong(f"{g.get('game_id', '')}"),
+                                                dbc.Badge(f"{res_icon} {'胜' if g.get('win') else '负'}",
+                                                          color=res_color, className='ms-2', pill=True)
+                                            ],
+                                            className='mb-1'
+                                        ),
+                                        html.Div(
+                                            [
+                                                html.Span(f"{g.get('player', '')} vs {g.get('opponent', '')}"),
+                                                html.Span(f" · {g.get('match_date', '')}", className='text-muted')
+                                            ],
+                                            className='small'
+                                        ),
+                                        html.Div(
+                                            [
+                                                dbc.Badge(g.get('opening_family', ''), color='info', className='me-1'),
+                                                html.Span(f"胜势手: {g.get('key_winning_moves', 0)} / 失误: {g.get('key_mistakes', 0)}",
+                                                          className='text-muted small')
+                                            ],
+                                            className='mt-1'
+                                        )
+                                    ],
+                                    md=9
+                                ),
+                                dbc.Col(
+                                    dbc.Button(
+                                        '移除',
+                                        id={'type': 'remove-training-btn', 'index': g.get('game_id', '')},
+                                        color='outline-danger',
+                                        size='sm',
+                                        className='w-100'
+                                    ),
+                                    md=3,
+                                    className='d-flex align-items-center'
+                                )
+                            ],
+                            align='center'
+                        )
+                    ]
+                )
+            )
+        games_list = dbc.ListGroup(game_items, flush=True)
+    else:
+        games_list = html.Div(
+            '暂无待练习对局，可在「经典对局复盘」区将感兴趣的对局加入训练清单',
+            className='text-muted small py-3 text-center'
+        )
+
+    if not weaknesses.empty:
+        weak_table_data = weaknesses.copy()
+        table_cols = [
+            {'name': '开局体系', 'id': 'opening_family'},
+            {'name': '具体开局', 'id': 'opening'},
+            {'name': '使用数', 'id': 'count'},
+            {'name': '胜率(%)', 'id': 'win_rate'}
+        ]
+        if 'avg_mistakes' in weak_table_data.columns:
+            table_cols.append({'name': '平均失误', 'id': 'avg_mistakes'})
+        if 'net_gain' in weak_table_data.columns:
+            table_cols.append({'name': '净收益', 'id': 'net_gain'})
+
+        show_cols = [c['id'] for c in table_cols]
+        for c in show_cols:
+            if c not in weak_table_data.columns:
+                weak_table_data[c] = 0
+
+        display_df = weak_table_data[show_cols].copy()
+        if 'win_rate' in display_df.columns:
+            display_df['win_rate'] = display_df['win_rate'].round(1)
+        if 'avg_mistakes' in display_df.columns:
+            display_df['avg_mistakes'] = display_df['avg_mistakes'].round(2)
+        if 'net_gain' in display_df.columns:
+            display_df['net_gain'] = display_df['net_gain'].round(2)
+
+        weakness_table = dash_table.DataTable(
+            data=display_df.to_dict('records'),
+            columns=table_cols,
+            page_size=5,
+            style_table={'overflowX': 'auto'},
+            style_header={'backgroundColor': '#8b4513', 'color': 'white', 'fontWeight': 'bold', 'fontSize': '12px'},
+            style_cell={'textAlign': 'center', 'padding': '6px', 'fontSize': '12px'},
+            style_data_conditional=[
+                {
+                    'if': {'filter_query': '{胜率(%)} < 40', 'column_id': 'win_rate'},
+                    'backgroundColor': '#f8d7da',
+                    'color': '#721c24',
+                    'fontWeight': 'bold'
+                }
+            ]
+        )
+    else:
+        weakness_table = html.Div(
+            '暂无足够数据生成开局弱点分析（至少需要 2 局以上同类开局）',
+            className='text-muted small py-5 text-center'
+        )
+
+    focus_advice_children = []
+    if not weaknesses.empty:
+        worst = weaknesses.iloc[0]
+        focus_advice_children.append(
+            html.Div(
+                [
+                    html.I('🎯 ', className='text-danger'),
+                    html.Strong('首要突破点：'),
+                    f"「{worst['opening']}」胜率仅 {worst['win_rate']:.1f}%（{int(worst['count'])}局），建议本周重点攻克"
+                ],
+                className='mb-2'
+            )
+        )
+        if len(weaknesses) >= 2:
+            second = weaknesses.iloc[1]
+            focus_advice_children.append(
+                html.Div(
+                    [
+                        html.I('📌 '),
+                        html.Strong('次要训练点：'),
+                        f"「{second['opening']}」胜率 {second['win_rate']:.1f}%（{int(second['count'])}局）"
+                    ],
+                    className='mb-2 text-muted'
+                )
+            )
+
+        training_ids_list = training_ids or []
+        if len(training_ids_list) > 0:
+            focus_advice_children.append(
+                html.Div(
+                    [
+                        html.I('📝 '),
+                        html.Strong('训练进度：'),
+                        f"已添加 {len(training_ids_list)} 局待复盘，建议每日完成 2-3 局深度复盘"
+                    ],
+                    className='mt-2 small text-muted'
+                )
+            )
+    else:
+        focus_advice_children.append(
+            html.Div(
+                '当前筛选条件下暂无明显开局弱点，可继续保持现有训练节奏',
+                className='text-muted small py-2'
+            )
+        )
+
+    focus_advice = html.Div(focus_advice_children)
+
+    return total_count, weak_count, weak_games, avg_wr, games_list, weakness_table, focus_advice
+
+
+@app.callback(
+    Output('training-game-ids', 'data', allow_duplicate=True),
+    Input({'type': 'remove-training-btn', 'index': ALL}, 'n_clicks'),
+    State('training-game-ids', 'data'),
+    prevent_initial_call=True
+)
+def remove_game_from_training(n_clicks_list, training_ids):
+    ctx = callback_context
+    if not ctx.triggered:
+        return dash.no_update
+
+    trigger = ctx.triggered[0]['prop_id']
+    try:
+        trigger_dict = json.loads(trigger.split('.')[0])
+        game_id = trigger_dict.get('index')
+    except (ValueError, KeyError, AttributeError):
+        return dash.no_update
+
+    if not game_id:
+        return dash.no_update
+
+    training_ids = training_ids or []
+    if game_id in training_ids:
+        new_ids = [gid for gid in training_ids if gid != game_id]
+        return new_ids
+
+    return dash.no_update
 
 
 @app.callback(

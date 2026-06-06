@@ -431,3 +431,193 @@ def compare_players_mistakes(df, players):
         return pd.DataFrame()
     result = pd.concat(all_mistakes, ignore_index=True)
     return result.sort_values(['player', 'total_mistakes'], ascending=[True, False])
+
+
+def get_game_detail(df, game_id):
+    if df is None or len(df) == 0 or game_id is None:
+        return {}
+
+    game = df[df['game_id'] == game_id]
+    if game.empty:
+        return {}
+
+    row = game.iloc[0]
+    match_date_str = row['match_date'].strftime('%Y-%m-%d') if hasattr(row['match_date'], 'strftime') else str(row['match_date'])
+
+    player_stats_df = compute_player_stats(df)
+    player_stats_df = classify_playing_style(player_stats_df)
+
+    def get_style(player_name):
+        s = player_stats_df[player_stats_df['player'] == player_name]
+        if not s.empty:
+            return s.iloc[0]['playing_style']
+        return '未知'
+
+    return {
+        'game_id': row['game_id'],
+        'player': row['player'],
+        'player_level': row['player_level'],
+        'player_style': get_style(row['player']),
+        'opponent': row['opponent'],
+        'opponent_level': row['opponent_level'],
+        'game_type': row['game_type'],
+        'opening_family': row['opening_family'],
+        'opening': row['opening'],
+        'result': row['result'],
+        'total_moves': int(row['total_moves']),
+        'key_winning_moves': int(row['key_winning_moves']),
+        'key_mistakes': int(row['key_mistakes']),
+        'aggressive_moves': int(row['aggressive_moves']),
+        'defensive_moves': int(row['defensive_moves']),
+        'territory_gain': int(row['territory_gain']),
+        'match_date': match_date_str,
+        'competition_type': row['competition_type'],
+        'era': row.get('era', '未知'),
+        'school': row.get('school', '未知'),
+        'win': bool(row['win'])
+    }
+
+
+def generate_game_training_advice(game_detail, df):
+    if not game_detail or df is None or len(df) == 0:
+        return []
+
+    advice = []
+    p = game_detail.get('player')
+    opening_family = game_detail.get('opening_family')
+    opening = game_detail.get('opening')
+    mistakes = game_detail.get('key_mistakes', 0)
+    winning_moves = game_detail.get('key_winning_moves', 0)
+    is_win = game_detail.get('win', False)
+    game_type = game_detail.get('game_type', '')
+
+    p_df = df[df['player'] == p] if p else df
+    if len(p_df) == 0:
+        p_df = df
+
+    target_player = p if (p is not None and len(p_df) < len(df)) else None
+
+    if is_win:
+        advice.append({
+            'category': '对局亮点',
+            'level': 'success',
+            'content': f"本局取得胜利，打出了 {winning_moves} 手关键胜势手，建议总结「{opening}」布局下的胜势节奏，形成可复制的赢棋模式。"
+        })
+    else:
+        advice.append({
+            'category': '需要反思',
+            'level': 'danger',
+            'content': f"本局失利，出现 {mistakes} 次关键失误，建议重点复盘第 50-120 手的决策节点，识别「{opening}」布局下的常见败招。"
+        })
+
+    opening_stats = get_opening_distribution(p_df, target_player)
+    same_opening = opening_stats[opening_stats['opening'] == opening]
+    if not same_opening.empty:
+        r = same_opening.iloc[0]
+        if r['win_rate'] >= 60:
+            advice.append({
+                'category': '擅长开局',
+                'level': 'success',
+                'content': f"您在「{opening}」中历史胜率 {r['win_rate']}%（{int(r['count'])}局），可作为核心武器继续强化，建议增加实战训练量。"
+            })
+        elif r['win_rate'] <= 40:
+            advice.append({
+                'category': '开局弱点',
+                'level': 'warning',
+                'content': f"您在「{opening}」中历史胜率仅 {r['win_rate']}%（{int(r['count'])}局），属于明显短板，建议本周重点训练该布局的变例。"
+            })
+        else:
+            advice.append({
+                'category': '开局提升空间',
+                'level': 'info',
+                'content': f"「{opening}」历史胜率 {r['win_rate']}%，建议从中盘战斗阶段入手进一步提升。"
+            })
+
+    if mistakes >= 3:
+        advice.append({
+            'category': '失误控制',
+            'level': 'danger',
+            'content': f"本局失误次数偏多（{mistakes}次），建议进行「慢棋读秒训练」，在每个关键节点至少留出 30 秒思考时间。"
+        })
+    elif mistakes >= 2:
+        advice.append({
+            'category': '失误控制',
+            'level': 'warning',
+            'content': f"本局有 {mistakes} 次失误，建议复盘时标记出每一处失误并写出改进招法。"
+        })
+
+    key_stats = get_key_move_analysis(p_df, target_player)
+    family_stats = key_stats[key_stats['opening_family'] == opening_family]
+    if not family_stats.empty:
+        fs = family_stats.iloc[0]
+        if fs['avg_mistakes'] > 1.5:
+            advice.append({
+                'category': '布局体系短板',
+                'level': 'danger',
+                'content': f"在「{opening_family}」体系中您的平均失误为 {fs['avg_mistakes'].round(2)} 次，建议系统学习该体系中的中盘攻防要点。"
+            })
+        if fs['net_gain'] < 0:
+            advice.append({
+                'category': '净收益分析',
+                'level': 'warning',
+                'content': f"「{opening_family}」体系下净收益为负（{fs['net_gain']:.2f}），说明失误多于胜势手，需加强该体系的战术训练。"
+            })
+
+    advice.append({
+        'category': '训练任务',
+        'level': 'primary',
+        'content': f"建议：① 深度复盘本局（不少于 40 分钟），写出 3 处关键改进点；② 做 10 道「{opening_family}」相关的死活/战术题；③ 在下周对弈中至少 2 次主动选择「{opening}」布局进行实战验证。"
+    })
+
+    return advice
+
+
+def get_opening_weaknesses(df, player=None, min_games=2):
+    if df is None or len(df) == 0:
+        return pd.DataFrame()
+
+    filtered = df if player is None or player == 'ALL' else df[df['player'] == player]
+    if len(filtered) == 0:
+        return pd.DataFrame()
+
+    opening_stats = get_opening_distribution(filtered, None if player == 'ALL' else player)
+    if opening_stats.empty:
+        return pd.DataFrame()
+
+    weaknesses = opening_stats[opening_stats['count'] >= min_games].copy()
+    weaknesses = weaknesses.sort_values('win_rate', ascending=True).head(5)
+
+    key_stats = get_key_move_analysis(filtered, None if player == 'ALL' else player)
+    if not key_stats.empty:
+        weaknesses = weaknesses.merge(
+            key_stats[['opening_family', 'avg_mistakes', 'avg_winning_moves', 'net_gain']],
+            on='opening_family',
+            how='left'
+        )
+
+    return weaknesses.reset_index(drop=True)
+
+
+def get_training_list_summary(df, training_game_ids, player=None):
+    if df is None or len(df) == 0:
+        return {'games': [], 'weaknesses': pd.DataFrame(), 'stats': {}}
+
+    filtered = df if player is None or player == 'ALL' else df[df['player'] == player]
+
+    games = []
+    if training_game_ids:
+        for gid in training_game_ids:
+            detail = get_game_detail(filtered, gid)
+            if detail:
+                games.append(detail)
+
+    weaknesses = get_opening_weaknesses(filtered, player if player != 'ALL' else None)
+
+    stats = {
+        'total_training': len(games),
+        'weak_opening_count': len(weaknesses),
+        'total_weak_games': int(weaknesses['count'].sum()) if not weaknesses.empty else 0,
+        'avg_weak_winrate': float(weaknesses['win_rate'].mean()) if not weaknesses.empty else 0.0
+    }
+
+    return {'games': games, 'weaknesses': weaknesses, 'stats': stats}
