@@ -62,12 +62,12 @@ NAVBAR = dbc.Navbar(
         dbc.Collapse(
             dbc.Nav(
                 [
-                    dbc.NavItem(dbc.NavLink('📊 总览分析', href='#overview', external_link=True)),
-                    dbc.NavItem(dbc.NavLink('🎯 布局偏好', href='#opening', external_link=True)),
-                    dbc.NavItem(dbc.NavLink('📈 胜率分析', href='#winrate', external_link=True)),
-                    dbc.NavItem(dbc.NavLink('🎭 棋风聚类', href='#style', external_link=True)),
-                    dbc.NavItem(dbc.NavLink('🏆 经典对局', href='#games', external_link=True)),
-                    dbc.NavItem(dbc.NavLink('💡 训练建议', href='#advice', external_link=True)),
+                    dbc.NavItem(dbc.NavLink('📊 总览分析', href='#overview')),
+                    dbc.NavItem(dbc.NavLink('🎯 布局偏好', href='#opening')),
+                    dbc.NavItem(dbc.NavLink('📈 胜率分析', href='#winrate')),
+                    dbc.NavItem(dbc.NavLink('🎭 棋风聚类', href='#style')),
+                    dbc.NavItem(dbc.NavLink('🏆 经典对局', href='#games')),
+                    dbc.NavItem(dbc.NavLink('💡 训练建议', href='#advice')),
                 ],
                 className='ms-auto',
                 navbar=True,
@@ -279,118 +279,138 @@ OVERVIEW_CARDS = dbc.Row(
     className='mb-4'
 )
 
-HEATMAP_SECTION = dbc.Card(
+HEATMAP_SECTION = html.Div(
     [
-        dbc.CardHeader([html.I(className='fas fa-fire me-2'), html.Span(id='overview', style={'display': 'none'}), '🔥 布局偏好热力图 (棋手 × 开局胜率)'], className='bg-light fw-bold'),
-        dbc.CardBody(dcc.Graph(id='heatmap-chart', style={'height': '500px'}))
-    ],
-    className='mb-4 shadow-sm'
-)
-
-WINRATE_TREND_SECTION = dbc.Card(
-    [
-        dbc.CardHeader([html.Span(id='winrate', style={'display': 'none'}), '📈 胜率趋势分析'], className='bg-light fw-bold'),
-        dbc.CardBody(
+        html.Div(id='overview', style={'position': 'relative', 'top': '-70px'}),
+        dbc.Card(
             [
-                dbc.Tabs(
-                    [
-                        dbc.Tab(
-                            dcc.Graph(id='winrate-trend-chart', style={'height': '400px'}),
-                            label='📅 月度胜率趋势'
-                        ),
-                        dbc.Tab(
-                            dcc.Graph(id='cumulative-winrate-chart', style={'height': '400px'}),
-                            label='📊 累计胜率走势'
-                        ),
-                        dbc.Tab(
-                            dcc.Graph(id='level-analysis-chart', style={'height': '400px'}),
-                            label='⚖️ 等级差胜率分析'
-                        )
-                    ]
-                )
-            ]
+                dbc.CardHeader([html.I(className='fas fa-fire me-2'), '🔥 布局偏好热力图 (棋手 × 开局胜率)'], className='bg-light fw-bold'),
+                dbc.CardBody(dcc.Graph(id='heatmap-chart', style={'height': '500px'}))
+            ],
+            className='mb-4 shadow-sm'
         )
-    ],
-    className='mb-4 shadow-sm'
+    ]
 )
 
-OPENING_SECTION = dbc.Card(
+WINRATE_TREND_SECTION = html.Div(
     [
-        dbc.CardHeader([html.Span(id='opening', style={'display': 'none'}), '🎯 开局偏好与胜率分布'], className='bg-light fw-bold'),
-        dbc.CardBody(
+        html.Div(id='winrate', style={'position': 'relative', 'top': '-70px'}),
+        dbc.Card(
             [
-                dbc.Row(
+                dbc.CardHeader('📈 胜率趋势分析', className='bg-light fw-bold'),
+                dbc.CardBody(
                     [
-                        dbc.Col(
-                            dcc.Graph(id='opening-bar-chart', style={'height': '450px'}),
-                            md=7
-                        ),
-                        dbc.Col(
-                            dcc.Graph(id='opening-pie-chart', style={'height': '450px'}),
-                            md=5
-                        )
-                    ]
-                ),
-                html.Hr(),
-                html.H6('📋 布局详细统计', className='mb-3'),
-                dash_table.DataTable(
-                    id='opening-detail-table',
-                    page_size=8,
-                    style_table={'overflowX': 'auto'},
-                    style_header={'backgroundColor': '#2c3e50', 'color': 'white', 'fontWeight': 'bold'},
-                    style_cell={'textAlign': 'center', 'padding': '10px'},
-                    style_data_conditional=[
-                        {
-                            'if': {'filter_query': '{win_rate} >= 60'},
-                            'backgroundColor': '#d4edda',
-                            'color': '#155724'
-                        },
-                        {
-                            'if': {'filter_query': '{win_rate} < 40'},
-                            'backgroundColor': '#f8d7da',
-                            'color': '#721c24'
-                        }
-                    ]
-                )
-            ]
-        )
-    ],
-    className='mb-4 shadow-sm'
-)
-
-STYLE_SECTION = dbc.Card(
-    [
-        dbc.CardHeader([html.Span(id='style', style={'display': 'none'}), '🎭 棋风类型聚类分析'], className='bg-light fw-bold'),
-        dbc.CardBody(
-            [
-                dbc.Row(
-                    [
-                        dbc.Col(
-                            dcc.Graph(id='style-scatter-chart', style={'height': '500px'}),
-                            md=8
-                        ),
-                        dbc.Col(
+                        dbc.Tabs(
                             [
-                                html.H6('🏷️ 棋风分布统计', className='mb-3'),
-                                dcc.Graph(id='style-pie-chart', style={'height': '280px'}),
-                                html.Hr(),
-                                html.H6('📊 各棋风平均指标', className='mb-3 mt-3'),
-                                dash_table.DataTable(
-                                    id='style-stats-table',
-                                    page_size=5,
-                                    style_table={'overflowX': 'auto'},
-                                    style_header={'backgroundColor': '#34495e', 'color': 'white', 'fontWeight': 'bold', 'fontSize': '12px'},
-                                    style_cell={'textAlign': 'center', 'padding': '6px', 'fontSize': '12px'}
+                                dbc.Tab(
+                                    dcc.Graph(id='winrate-trend-chart', style={'height': '400px'}),
+                                    label='📅 月度胜率趋势'
+                                ),
+                                dbc.Tab(
+                                    dcc.Graph(id='cumulative-winrate-chart', style={'height': '400px'}),
+                                    label='📊 累计胜率走势'
+                                ),
+                                dbc.Tab(
+                                    dcc.Graph(id='level-analysis-chart', style={'height': '400px'}),
+                                    label='⚖️ 等级差胜率分析'
                                 )
-                            ],
-                            md=4
+                            ]
                         )
                     ]
                 )
-            ]
+            ],
+            className='mb-4 shadow-sm'
         )
-    ],
-    className='mb-4 shadow-sm'
+    ]
+)
+
+OPENING_SECTION = html.Div(
+    [
+        html.Div(id='opening', style={'position': 'relative', 'top': '-70px'}),
+        dbc.Card(
+            [
+                dbc.CardHeader('🎯 开局偏好与胜率分布', className='bg-light fw-bold'),
+                dbc.CardBody(
+                    [
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    dcc.Graph(id='opening-bar-chart', style={'height': '450px'}),
+                                    md=7
+                                ),
+                                dbc.Col(
+                                    dcc.Graph(id='opening-pie-chart', style={'height': '450px'}),
+                                    md=5
+                                )
+                            ]
+                        ),
+                        html.Hr(),
+                        html.H6('📋 布局详细统计', className='mb-3'),
+                        dash_table.DataTable(
+                            id='opening-detail-table',
+                            page_size=8,
+                            style_table={'overflowX': 'auto'},
+                            style_header={'backgroundColor': '#2c3e50', 'color': 'white', 'fontWeight': 'bold'},
+                            style_cell={'textAlign': 'center', 'padding': '10px'},
+                            style_data_conditional=[
+                                {
+                                    'if': {'filter_query': '{win_rate} >= 60'},
+                                    'backgroundColor': '#d4edda',
+                                    'color': '#155724'
+                                },
+                                {
+                                    'if': {'filter_query': '{win_rate} < 40'},
+                                    'backgroundColor': '#f8d7da',
+                                    'color': '#721c24'
+                                }
+                            ]
+                        )
+                    ]
+                )
+            ],
+            className='mb-4 shadow-sm'
+        )
+    ]
+)
+
+STYLE_SECTION = html.Div(
+    [
+        html.Div(id='style', style={'position': 'relative', 'top': '-70px'}),
+        dbc.Card(
+            [
+                dbc.CardHeader('🎭 棋风类型聚类分析', className='bg-light fw-bold'),
+                dbc.CardBody(
+                    [
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    dcc.Graph(id='style-scatter-chart', style={'height': '500px'}),
+                                    md=8
+                                ),
+                                dbc.Col(
+                                    [
+                                        html.H6('🏷️ 棋风分布统计', className='mb-3'),
+                                        dcc.Graph(id='style-pie-chart', style={'height': '280px'}),
+                                        html.Hr(),
+                                        html.H6('📊 各棋风平均指标', className='mb-3 mt-3'),
+                                        dash_table.DataTable(
+                                            id='style-stats-table',
+                                            page_size=5,
+                                            style_table={'overflowX': 'auto'},
+                                            style_header={'backgroundColor': '#34495e', 'color': 'white', 'fontWeight': 'bold', 'fontSize': '12px'},
+                                            style_cell={'textAlign': 'center', 'padding': '6px', 'fontSize': '12px'}
+                                        )
+                                    ],
+                                    md=4
+                                )
+                            ]
+                        )
+                    ]
+                )
+            ],
+            className='mb-4 shadow-sm'
+        )
+    ]
 )
 
 KEY_MOVE_SECTION = dbc.Card(
@@ -416,23 +436,28 @@ KEY_MOVE_SECTION = dbc.Card(
     className='mb-4 shadow-sm'
 )
 
-GAMES_SECTION = dbc.Card(
+GAMES_SECTION = html.Div(
     [
-        dbc.CardHeader([html.Span(id='games', style={'display': 'none'}), '🏆 经典对局复盘'], className='bg-light fw-bold'),
-        dbc.CardBody(
+        html.Div(id='games', style={'position': 'relative', 'top': '-70px'}),
+        dbc.Card(
             [
-                dash_table.DataTable(
-                    id='classic-games-table',
-                    page_size=5,
-                    style_table={'overflowX': 'auto'},
-                    style_header={'backgroundColor': '#2c3e50', 'color': 'white', 'fontWeight': 'bold'},
-                    style_cell={'textAlign': 'center', 'padding': '10px'},
-                    style_data={'whiteSpace': 'normal', 'height': 'auto'}
+                dbc.CardHeader('🏆 经典对局复盘', className='bg-light fw-bold'),
+                dbc.CardBody(
+                    [
+                        dash_table.DataTable(
+                            id='classic-games-table',
+                            page_size=5,
+                            style_table={'overflowX': 'auto'},
+                            style_header={'backgroundColor': '#2c3e50', 'color': 'white', 'fontWeight': 'bold'},
+                            style_cell={'textAlign': 'center', 'padding': '10px'},
+                            style_data={'whiteSpace': 'normal', 'height': 'auto'}
+                        )
+                    ]
                 )
-            ]
+            ],
+            className='mb-4 shadow-sm'
         )
-    ],
-    className='mb-4 shadow-sm'
+    ]
 )
 
 
@@ -465,45 +490,50 @@ def _make_advice_card(advice):
     )
 
 
-ADVICE_SECTION = dbc.Card(
+ADVICE_SECTION = html.Div(
     [
-        dbc.CardHeader([html.Span(id='advice', style={'display': 'none'}), '💡 智能训练建议区'], className='bg-light fw-bold'),
-        dbc.CardBody(
+        html.Div(id='advice', style={'position': 'relative', 'top': '-70px'}),
+        dbc.Card(
             [
-                html.Div(id='advice-cards'),
-                html.Hr(),
-                dbc.Row(
+                dbc.CardHeader('💡 智能训练建议区', className='bg-light fw-bold'),
+                dbc.CardBody(
                     [
-                        dbc.Col(
-                            dbc.Card(
-                                dbc.CardBody(
-                                    [
-                                        html.H6('📚 推荐开局策略', className='fw-bold text-primary'),
-                                        html.Div(id='recommended-openings', className='mt-2')
-                                    ]
+                        html.Div(id='advice-cards'),
+                        html.Hr(),
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    dbc.Card(
+                                        dbc.CardBody(
+                                            [
+                                                html.H6('📚 推荐开局策略', className='fw-bold text-primary'),
+                                                html.Div(id='recommended-openings', className='mt-2')
+                                            ]
+                                        ),
+                                        className='border-primary'
+                                    ),
+                                    md=6
                                 ),
-                                className='border-primary'
-                            ),
-                            md=6
-                        ),
-                        dbc.Col(
-                            dbc.Card(
-                                dbc.CardBody(
-                                    [
-                                        html.H6('🎯 需要避开的陷阱', className='fw-bold text-danger'),
-                                        html.Div(id='common-traps', className='mt-2')
-                                    ]
-                                ),
-                                className='border-danger'
-                            ),
-                            md=6
+                                dbc.Col(
+                                    dbc.Card(
+                                        dbc.CardBody(
+                                            [
+                                                html.H6('🎯 需要避开的陷阱', className='fw-bold text-danger'),
+                                                html.Div(id='common-traps', className='mt-2')
+                                            ]
+                                        ),
+                                        className='border-danger'
+                                    ),
+                                    md=6
+                                )
+                            ]
                         )
                     ]
                 )
-            ]
+            ],
+            className='mb-4 shadow-sm'
         )
-    ],
-    className='mb-4 shadow-sm'
+    ]
 )
 
 app.layout = html.Div(
@@ -580,12 +610,11 @@ def load_dataset(upload_contents, btn_clicks, upload_filename):
     Output('filter-era', 'options'),
     Output('filter-school', 'options'),
     Output('filter-competition', 'options'),
-    Output('player-select', 'options'),
     Input('stored-data', 'data')
 )
 def update_filter_options(data):
     if not data:
-        return [{'label': '全部', 'value': '全部'}], [{'label': '全部', 'value': '全部'}], [{'label': '全部', 'value': '全部'}], [{'label': '全体棋手', 'value': 'ALL'}]
+        return [{'label': '全部', 'value': '全部'}], [{'label': '全部', 'value': '全部'}], [{'label': '全部', 'value': '全部'}]
     df = pd.DataFrame(data)
 
     def make_options(series):
@@ -594,11 +623,21 @@ def update_filter_options(data):
             opts.append({'label': str(val), 'value': str(val)})
         return opts
 
+    return make_options(df['era']), make_options(df['school']), make_options(df['competition_type'])
+
+
+@app.callback(
+    Output('player-select', 'options'),
+    Input('filtered-data', 'data')
+)
+def update_player_options(data):
+    if not data:
+        return [{'label': '全体棋手', 'value': 'ALL'}]
+    df = pd.DataFrame(data)
     player_opts = [{'label': '全体棋手', 'value': 'ALL'}]
     for p in sorted(df['player'].unique().tolist()):
         player_opts.append({'label': f'{p}', 'value': p})
-
-    return make_options(df['era']), make_options(df['school']), make_options(df['competition_type']), player_opts
+    return player_opts
 
 
 @app.callback(
@@ -630,20 +669,27 @@ def apply_filters(data, game_type, era, school, competition):
     Output('stat-avg-winrate', 'children'),
     Output('stat-player-count', 'children'),
     Output('stat-opening-count', 'children'),
-    Input('filtered-data', 'data')
+    Input('filtered-data', 'data'),
+    Input('player-select', 'value')
 )
-def update_overview_stats(data):
+def update_overview_stats(data, player):
     if not data:
         return '0', '-', '0%', '0', '0'
     df = load_data(uploaded_df=pd.DataFrame(data))
     if df is None:
         return '0', '-', '0%', '0', '0'
 
+    if player and player != 'ALL':
+        df = df[df['player'] == player]
+
     total = len(df)
     go_count = len(df[df['game_type'] == '围棋'])
     xq_count = len(df[df['game_type'] == '象棋'])
-    breakdown = f'围棋 {go_count} 局 · 象棋 {xq_count} 局'
-    avg_wr = f"{df['win'].mean() * 100:.1f}%"
+    if player and player != 'ALL':
+        breakdown = f'棋手: {player}'
+    else:
+        breakdown = f'围棋 {go_count} 局 · 象棋 {xq_count} 局'
+    avg_wr = f"{df['win'].mean() * 100:.1f}%" if len(df) > 0 else '0%'
     player_cnt = df['player'].nunique()
     opening_cnt = df['opening_family'].nunique()
 
@@ -652,14 +698,18 @@ def update_overview_stats(data):
 
 @app.callback(
     Output('heatmap-chart', 'figure'),
-    Input('filtered-data', 'data')
+    Input('filtered-data', 'data'),
+    Input('player-select', 'value')
 )
-def update_heatmap(data):
+def update_heatmap(data, player):
     if not data:
         return go.Figure()
     df = load_data(uploaded_df=pd.DataFrame(data))
     if df is None or len(df) == 0:
         return go.Figure()
+
+    if player and player != 'ALL':
+        df = df[df['player'] == player]
 
     heatmap_data = get_heatmap_data(df)
     if heatmap_data.empty:
@@ -680,8 +730,9 @@ def update_heatmap(data):
         )
     )
 
+    title_suffix = f' - {player}' if player and player != 'ALL' else ''
     fig.update_layout(
-        title={'text': '各棋手在不同布局体系下的胜率分布', 'x': 0.5, 'font': {'size': 16}},
+        title={'text': f'各棋手在不同布局体系下的胜率分布{title_suffix}', 'x': 0.5, 'font': {'size': 16}},
         xaxis={'title': '开局体系', 'tickangle': -30},
         yaxis={'title': '棋手'},
         height=500,
@@ -955,9 +1006,10 @@ def update_keymove_charts(data, player):
     Output('style-pie-chart', 'figure'),
     Output('style-stats-table', 'data'),
     Output('style-stats-table', 'columns'),
-    Input('filtered-data', 'data')
+    Input('filtered-data', 'data'),
+    Input('player-select', 'value')
 )
-def update_style_charts(data):
+def update_style_charts(data, player):
     empty_fig = go.Figure()
     if not data:
         return empty_fig, empty_fig, [], []
@@ -972,16 +1024,41 @@ def update_style_charts(data):
 
     player_stats = classify_playing_style(player_stats)
 
+    player_stats['highlight'] = player_stats['player'].apply(
+        lambda x: '★ ' + x if (player and player != 'ALL' and x == player) else x
+    )
+    player_stats['is_selected'] = player_stats['player'].apply(
+        lambda x: 2 if (player and player != 'ALL' and x == player) else 1
+    )
+
     fig1 = px.scatter(
         player_stats,
         x='aggression_ratio',
         y='defense_ratio',
         color='playing_style',
-        size='total_games',
+        size='is_selected',
+        size_max=25,
         hover_data=['player', 'win_rate', 'efficiency', 'total_games'],
         color_discrete_map=STYLE_COLORS,
         title='棋风类型聚类散点图 (进攻倾向 vs 防守倾向)'
     )
+
+    if player and player != 'ALL' and player in player_stats['player'].values:
+        sel = player_stats[player_stats['player'] == player].iloc[0]
+        fig1.add_annotation(
+            x=sel['aggression_ratio'],
+            y=sel['defense_ratio'],
+            text=f"⭐ {player}",
+            showarrow=True,
+            arrowhead=2,
+            ax=50,
+            ay=-40,
+            font=dict(size=14, color='black', family='Arial Bold'),
+            bgcolor='rgba(255,255,0,0.7)',
+            bordercolor='#f1c40f',
+            borderwidth=2
+        )
+
     fig1.update_layout(
         xaxis={'title': '进攻倾向比率 (越高越激进)', 'range': [0, 1]},
         yaxis={'title': '防守倾向比率 (越高越稳健)', 'range': [0, 1]},
@@ -1003,16 +1080,32 @@ def update_style_charts(data):
     fig2.update_traces(textposition='inside', textinfo='percent+label')
     fig2.update_layout(template='plotly_white', showlegend=False)
 
-    style_grouped = player_stats.groupby('playing_style').agg(
-        棋手数=('player', 'count'),
-        平均胜率=('win_rate', 'mean'),
-        平均进攻率=('aggression_ratio', lambda x: f'{x.mean()*100:.1f}%'),
-        平均防守率=('defense_ratio', lambda x: f'{x.mean()*100:.1f}%'),
-        平均效率=('efficiency', 'mean')
-    ).reset_index()
-    style_grouped['平均胜率'] = style_grouped['平均胜率'].apply(lambda x: f'{x:.1f}%')
-    style_grouped['平均效率'] = style_grouped['平均效率'].apply(lambda x: f'{x:.2f}')
-    style_grouped = style_grouped.rename(columns={'playing_style': '棋风类型'})
+    if player and player != 'ALL' and player in player_stats['player'].values:
+        sel_player = player_stats[player_stats['player'] == player]
+        style_grouped = sel_player.rename(columns={
+            'player': '棋手',
+            'playing_style': '棋风类型',
+            'win_rate': '胜率',
+            'aggression_ratio': '进攻率',
+            'defense_ratio': '防守率',
+            'efficiency': '效率',
+            'total_games': '总局数'
+        })[['棋手', '棋风类型', '总局数', '胜率', '进攻率', '防守率', '效率']].copy()
+        style_grouped['胜率'] = style_grouped['胜率'].apply(lambda x: f'{x:.1f}%')
+        style_grouped['进攻率'] = style_grouped['进攻率'].apply(lambda x: f'{x*100:.1f}%')
+        style_grouped['防守率'] = style_grouped['防守率'].apply(lambda x: f'{x*100:.1f}%')
+        style_grouped['效率'] = style_grouped['效率'].apply(lambda x: f'{x:.2f}')
+    else:
+        style_grouped = player_stats.groupby('playing_style').agg(
+            棋手数=('player', 'count'),
+            平均胜率=('win_rate', 'mean'),
+            平均进攻率=('aggression_ratio', lambda x: f'{x.mean()*100:.1f}%'),
+            平均防守率=('defense_ratio', lambda x: f'{x.mean()*100:.1f}%'),
+            平均效率=('efficiency', 'mean')
+        ).reset_index()
+        style_grouped['平均胜率'] = style_grouped['平均胜率'].apply(lambda x: f'{x:.1f}%')
+        style_grouped['平均效率'] = style_grouped['平均效率'].apply(lambda x: f'{x:.2f}')
+        style_grouped = style_grouped.rename(columns={'playing_style': '棋风类型'})
 
     columns = [{'name': col, 'id': col} for col in style_grouped.columns]
 
