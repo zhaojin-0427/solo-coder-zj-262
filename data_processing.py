@@ -313,3 +313,121 @@ def get_classic_games(df, top_n=5):
         'game_id', 'player', 'opponent', 'opening', 'result',
         'total_moves', 'key_winning_moves', 'match_date', 'competition_type'
     ]]
+
+
+def compare_players_stats(df, players):
+    if df is None or len(df) == 0 or not players:
+        return pd.DataFrame()
+
+    results = []
+    for player in players:
+        p_df = df[df['player'] == player]
+        if len(p_df) == 0:
+            continue
+        stats = {
+            'player': player,
+            'total_games': len(p_df),
+            'wins': int(p_df['win'].sum()),
+            'losses': int(len(p_df) - p_df['win'].sum()),
+            'win_rate': round(p_df['win'].mean() * 100, 2),
+            'avg_moves': round(p_df['total_moves'].mean(), 1),
+            'avg_mistakes': round(p_df['key_mistakes'].mean(), 2),
+            'avg_winning_moves': round(p_df['key_winning_moves'].mean(), 2),
+            'avg_aggressive': round(p_df['aggressive_moves'].mean(), 1),
+            'avg_defensive': round(p_df['defensive_moves'].mean(), 1),
+            'avg_territory': round(p_df['territory_gain'].mean(), 1)
+        }
+        results.append(stats)
+
+    return pd.DataFrame(results)
+
+
+def compare_players_win_trend(df, players):
+    if df is None or len(df) == 0 or not players:
+        return pd.DataFrame()
+
+    all_monthly = []
+    for player in players:
+        p_df = df[df['player'] == player].sort_values('match_date')
+        if len(p_df) == 0:
+            continue
+        monthly = p_df.groupby(p_df['match_date'].dt.to_period('M')).agg(
+            games=('game_id', 'count'),
+            wins=('win', 'sum')
+        ).reset_index()
+        monthly['match_date'] = monthly['match_date'].astype(str)
+        monthly['win_rate'] = round(monthly['wins'] / monthly['games'] * 100, 2)
+        monthly['player'] = player
+        all_monthly.append(monthly)
+
+    if not all_monthly:
+        return pd.DataFrame()
+    return pd.concat(all_monthly, ignore_index=True)
+
+
+def compare_players_top_openings(df, players, top_n=5):
+    if df is None or len(df) == 0 or not players:
+        return pd.DataFrame()
+
+    all_openings = []
+    for player in players:
+        p_df = df[df['player'] == player]
+        if len(p_df) == 0:
+            continue
+        opening_stats = p_df.groupby(['opening_family', 'opening']).agg(
+            count=('game_id', 'count'),
+            wins=('win', 'sum')
+        ).reset_index()
+        opening_stats['win_rate'] = round(opening_stats['wins'] / opening_stats['count'] * 100, 2)
+        opening_stats = opening_stats.sort_values('count', ascending=False).head(top_n)
+        opening_stats['player'] = player
+        opening_stats['rank'] = range(1, len(opening_stats) + 1)
+        all_openings.append(opening_stats)
+
+    if not all_openings:
+        return pd.DataFrame()
+    return pd.concat(all_openings, ignore_index=True)
+
+
+def compare_players_styles(df, players):
+    if df is None or len(df) == 0 or not players:
+        return pd.DataFrame()
+
+    p_df = df[df['player'].isin(players)]
+    if len(p_df) == 0:
+        return pd.DataFrame()
+
+    player_stats = compute_player_stats(p_df)
+    if player_stats.empty:
+        return pd.DataFrame()
+
+    player_stats = classify_playing_style(player_stats)
+    return player_stats[[
+        'player', 'total_games', 'win_rate', 'playing_style',
+        'aggression_ratio', 'defense_ratio', 'efficiency', 'avg_territory'
+    ]]
+
+
+def compare_players_mistakes(df, players):
+    if df is None or len(df) == 0 or not players:
+        return pd.DataFrame()
+
+    all_mistakes = []
+    for player in players:
+        p_df = df[df['player'] == player]
+        if len(p_df) == 0:
+            continue
+        mistake_stats = p_df.groupby('opening_family').agg(
+            total_mistakes=('key_mistakes', 'sum'),
+            avg_mistakes=('key_mistakes', 'mean'),
+            games=('game_id', 'count'),
+            wins=('win', 'sum')
+        ).reset_index()
+        mistake_stats['win_rate'] = round(mistake_stats['wins'] / mistake_stats['games'] * 100, 2)
+        mistake_stats['player'] = player
+        all_mistakes.append(mistake_stats)
+
+    if not all_mistakes:
+        return pd.DataFrame()
+    result = pd.concat(all_mistakes, ignore_index=True)
+    return result.sort_values(['player', 'total_mistakes'], ascending=[True, False])

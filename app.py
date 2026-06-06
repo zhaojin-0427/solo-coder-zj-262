@@ -15,7 +15,8 @@ from data_processing import (
     load_data, compute_player_stats, classify_playing_style,
     get_opening_distribution, get_win_rate_trend, get_heatmap_data,
     get_level_analysis, get_key_move_analysis, generate_training_advice,
-    get_classic_games
+    get_classic_games, compare_players_stats, compare_players_win_trend,
+    compare_players_top_openings, compare_players_styles, compare_players_mistakes
 )
 from sample_data import generate_sample_data
 
@@ -37,6 +38,8 @@ STYLE_COLORS = {
     '精准计算型': '#9b59b6',
     '均衡型': '#95a5a6'
 }
+
+COMPARE_COLORS = ['#e74c3c', '#3498db', '#27ae60']
 
 NAVBAR = dbc.Navbar(
     [
@@ -67,6 +70,7 @@ NAVBAR = dbc.Navbar(
                     dbc.NavItem(dbc.NavLink('📈 胜率分析', href='#winrate')),
                     dbc.NavItem(dbc.NavLink('🎭 棋风聚类', href='#style')),
                     dbc.NavItem(dbc.NavLink('🏆 经典对局', href='#games')),
+                    dbc.NavItem(dbc.NavLink('⚔️ 多棋手对比', href='#compare')),
                     dbc.NavItem(dbc.NavLink('💡 训练建议', href='#advice')),
                 ],
                 className='ms-auto',
@@ -203,7 +207,22 @@ UPLOAD_SECTION = dbc.Card(
                                     clearable=False
                                 )
                             ],
-                            md=12
+                            md=6
+                        ),
+                        dbc.Col(
+                            [
+                                html.Label('⚔️ 对比棋手 (最多 3 人):', className='fw-bold'),
+                                dcc.Dropdown(
+                                    id='compare-player-select',
+                                    options=[],
+                                    value=[],
+                                    multi=True,
+                                    placeholder='选择要对比的棋手...',
+                                    clearable=True
+                                ),
+                                html.Div(id='compare-select-hint', className='small text-muted mt-1')
+                            ],
+                            md=6
                         )
                     ]
                 )
@@ -461,6 +480,76 @@ GAMES_SECTION = html.Div(
 )
 
 
+COMPARE_SECTION = html.Div(
+    [
+        html.Div(id='compare', style={'position': 'relative', 'top': '-70px'}),
+        dbc.Card(
+            [
+                dbc.CardHeader('⚔️ 多棋手对比分析', className='bg-light fw-bold'),
+                dbc.CardBody(
+                    [
+                        html.Div(id='compare-empty-hint', className='text-center text-muted py-4',
+                                 children='请在上方筛选区选择 1-3 名棋手进行对比分析'),
+                        html.Div(
+                            id='compare-content',
+                            children=[
+                                html.H6('📊 棋手核心指标对比', className='mb-3 mt-2'),
+                                dash_table.DataTable(
+                                    id='compare-stats-table',
+                                    page_size=5,
+                                    style_table={'overflowX': 'auto'},
+                                    style_header={'backgroundColor': '#2c3e50', 'color': 'white', 'fontWeight': 'bold'},
+                                    style_cell={'textAlign': 'center', 'padding': '8px'},
+                                    style_data_conditional=[
+                                        {
+                                            'if': {'column_id': '胜率(%)', 'filter_query': '{胜率(%)} >= 60'},
+                                            'backgroundColor': '#d4edda',
+                                            'color': '#155724'
+                                        },
+                                        {
+                                            'if': {'column_id': '胜率(%)', 'filter_query': '{胜率(%)} < 40'},
+                                            'backgroundColor': '#f8d7da',
+                                            'color': '#721c24'
+                                        }
+                                    ]
+                                ),
+                                html.Hr(),
+                                dbc.Row(
+                                    [
+                                        dbc.Col(
+                                            [
+                                                html.H6('📈 胜率趋势对比', className='mb-3'),
+                                                dcc.Graph(id='compare-winrate-chart', style={'height': '380px'})
+                                            ],
+                                            md=6
+                                        ),
+                                        dbc.Col(
+                                            [
+                                                html.H6('🎭 棋风类型对比', className='mb-3'),
+                                                dcc.Graph(id='compare-style-chart', style={'height': '380px'})
+                                            ],
+                                            md=6
+                                        )
+                                    ]
+                                ),
+                                html.Hr(),
+                                html.H6('🎯 常用开局 Top5 对比', className='mb-3'),
+                                dcc.Graph(id='compare-opening-chart', style={'height': '420px'}),
+                                html.Hr(),
+                                html.H6('⚠️ 关键失误分布对比', className='mb-3'),
+                                dcc.Graph(id='compare-mistake-chart', style={'height': '420px'})
+                            ],
+                            style={'display': 'none'}
+                        )
+                    ]
+                )
+            ],
+            className='mb-4 shadow-sm'
+        )
+    ]
+)
+
+
 def _make_advice_card(advice):
     color_map = {
         'success': 'success',
@@ -549,6 +638,7 @@ app.layout = html.Div(
                 KEY_MOVE_SECTION,
                 STYLE_SECTION,
                 GAMES_SECTION,
+                COMPARE_SECTION,
                 ADVICE_SECTION,
                 html.Footer(
                     html.Div(
@@ -1203,6 +1293,217 @@ def update_advice_section(data, player):
     common_traps_div = html.Div(trap_list) if trap_list else html.Div('暂无')
 
     return html.Div(advice_cards), recommended, common_traps_div
+
+
+@app.callback(
+    Output('compare-player-select', 'options'),
+    Input('filtered-data', 'data')
+)
+def update_compare_player_options(data):
+    if not data:
+        return []
+    df = pd.DataFrame(data)
+    player_opts = []
+    for p in sorted(df['player'].unique().tolist()):
+        player_opts.append({'label': f'{p}', 'value': p})
+    return player_opts
+
+
+@app.callback(
+    Output('compare-player-select', 'value'),
+    Output('compare-select-hint', 'children'),
+    Input('compare-player-select', 'value'),
+    prevent_initial_call=True
+)
+def enforce_max_compare_players(selected):
+    if selected is None:
+        return [], ''
+    if len(selected) > 3:
+        return selected[:3], f'⚠️ 最多只能选择 3 名棋手进行对比，已自动截取前 3 人'
+    if len(selected) == 0:
+        return [], '请选择 1-3 名棋手进行对比'
+    return selected, f'已选择 {len(selected)} 名棋手'
+
+
+@app.callback(
+    Output('compare-empty-hint', 'style'),
+    Output('compare-content', 'style'),
+    Output('compare-stats-table', 'data'),
+    Output('compare-stats-table', 'columns'),
+    Output('compare-winrate-chart', 'figure'),
+    Output('compare-style-chart', 'figure'),
+    Output('compare-opening-chart', 'figure'),
+    Output('compare-mistake-chart', 'figure'),
+    Input('filtered-data', 'data'),
+    Input('compare-player-select', 'value')
+)
+def update_comparison_view(data, selected_players):
+    empty_fig = go.Figure()
+    empty_style_hide = {'display': 'none'}
+    empty_style_show = {'textAlign': 'center', 'color': 'gray', 'padding': '2rem'}
+
+    if not data or not selected_players or len(selected_players) == 0:
+        return empty_style_show, empty_style_hide, [], [], empty_fig, empty_fig, empty_fig, empty_fig
+
+    df = load_data(uploaded_df=pd.DataFrame(data))
+    if df is None or len(df) == 0:
+        return empty_style_show, empty_style_hide, [], [], empty_fig, empty_fig, empty_fig, empty_fig
+
+    players = selected_players[:3]
+
+    stats_df = compare_players_stats(df, players)
+    if stats_df.empty:
+        return empty_style_show, empty_style_hide, [], [], empty_fig, empty_fig, empty_fig, empty_fig
+
+    show_style = {}
+    hide_style = {'display': 'none'}
+
+    stats_display = stats_df.rename(columns={
+        'player': '棋手',
+        'total_games': '总对局数',
+        'wins': '胜局',
+        'losses': '负局',
+        'win_rate': '胜率(%)',
+        'avg_moves': '平均手数',
+        'avg_mistakes': '平均失误',
+        'avg_winning_moves': '平均胜势手'
+    })
+    stats_display['胜率(%)'] = stats_display['胜率(%)'].apply(lambda x: f'{x:.1f}')
+    stats_cols = [{'name': col, 'id': col} for col in stats_display.columns]
+
+    trend_df = compare_players_win_trend(df, players)
+    fig1 = go.Figure()
+    if not trend_df.empty:
+        for i, player in enumerate(players):
+            sub = trend_df[trend_df['player'] == player]
+            if not sub.empty:
+                fig1.add_trace(
+                    go.Scatter(
+                        x=sub['match_date'],
+                        y=sub['win_rate'],
+                        mode='lines+markers',
+                        name=player,
+                        line=dict(color=COMPARE_COLORS[i % len(COMPARE_COLORS)], width=2.5),
+                        marker=dict(size=7)
+                    )
+                )
+        fig1.update_layout(
+            yaxis={'title': '胜率(%)', 'range': [0, 100]},
+            xaxis={'title': '月份', 'tickangle': -30},
+            template='plotly_white',
+            legend=dict(orientation='h', y=1.1),
+            title={'text': '月度胜率趋势对比', 'x': 0.5}
+        )
+    else:
+        fig1.update_layout(title={'text': '暂无趋势数据', 'x': 0.5}, template='plotly_white')
+
+    style_df = compare_players_styles(df, players)
+    fig2 = go.Figure()
+    if not style_df.empty:
+        fig2 = px.scatter(
+            style_df,
+            x='aggression_ratio',
+            y='defense_ratio',
+            color='player',
+            color_discrete_sequence=COMPARE_COLORS[:len(players)],
+            size='win_rate',
+            size_max=25,
+            hover_data=['player', 'playing_style', 'win_rate', 'efficiency', 'total_games'],
+            title='棋风类型分布 (进攻倾向 vs 防守倾向)'
+        )
+        for _, row in style_df.iterrows():
+            fig2.add_annotation(
+                x=row['aggression_ratio'],
+                y=row['defense_ratio'],
+                text=f"{row['player']}<br>({row['playing_style']})",
+                showarrow=True,
+                arrowhead=1,
+                ax=0,
+                ay=-35,
+                font=dict(size=11),
+                bgcolor='rgba(255,255,255,0.85)'
+            )
+        fig2.update_layout(
+            xaxis={'title': '进攻倾向比率 (越高越激进)', 'range': [0, 1]},
+            yaxis={'title': '防守倾向比率 (越高越稳健)', 'range': [0, 1]},
+            template='plotly_white',
+            legend=dict(orientation='h', y=1.1),
+            title={'x': 0.5}
+        )
+    else:
+        fig2.update_layout(title={'text': '暂无棋风数据', 'x': 0.5}, template='plotly_white')
+
+    opening_df = compare_players_top_openings(df, players, top_n=5)
+    fig3 = go.Figure()
+    if not opening_df.empty:
+        for i, player in enumerate(players):
+            sub = opening_df[opening_df['player'] == player].copy()
+            if not sub.empty:
+                sub = sub.sort_values('rank', ascending=True)
+                fig3.add_trace(
+                    go.Bar(
+                        x=sub['opening'],
+                        y=sub['count'],
+                        name=f'{player} (使用次数)',
+                        marker_color=COMPARE_COLORS[i % len(COMPARE_COLORS)],
+                        opacity=0.8,
+                        offsetgroup=i
+                    )
+                )
+                fig3.add_trace(
+                    go.Scatter(
+                        x=sub['opening'],
+                        y=sub['win_rate'],
+                        mode='lines+markers',
+                        name=f'{player} (胜率%)',
+                        line=dict(color=COMPARE_COLORS[i % len(COMPARE_COLORS)], width=2, dash='dot'),
+                        marker=dict(size=9, symbol='diamond'),
+                        yaxis='y2'
+                    )
+                )
+        fig3.update_layout(
+            barmode='group',
+            xaxis={'title': '开局名称', 'tickangle': -35},
+            yaxis={'title': '使用次数'},
+            yaxis2=dict(title='胜率(%)', overlaying='y', side='right', range=[0, 100], showgrid=False),
+            template='plotly_white',
+            legend=dict(orientation='h', y=1.15),
+            title={'text': '常用开局 Top5 对比 (使用次数 & 胜率)', 'x': 0.5}
+        )
+    else:
+        fig3.update_layout(title={'text': '暂无开局数据', 'x': 0.5}, template='plotly_white')
+
+    mistake_df = compare_players_mistakes(df, players)
+    fig4 = go.Figure()
+    if not mistake_df.empty:
+        for i, player in enumerate(players):
+            sub = mistake_df[mistake_df['player'] == player].head(6)
+            if not sub.empty:
+                fig4.add_trace(
+                    go.Bar(
+                        x=sub['opening_family'],
+                        y=sub['avg_mistakes'],
+                        name=f'{player} (平均失误)',
+                        marker_color=COMPARE_COLORS[i % len(COMPARE_COLORS)],
+                        opacity=0.85
+                    )
+                )
+        fig4.update_layout(
+            barmode='group',
+            xaxis={'title': '开局体系', 'tickangle': -30},
+            yaxis={'title': '平均失误次数'},
+            template='plotly_white',
+            legend=dict(orientation='h', y=1.1),
+            title={'text': '各开局体系关键失误分布对比', 'x': 0.5}
+        )
+    else:
+        fig4.update_layout(title={'text': '暂无失误数据', 'x': 0.5}, template='plotly_white')
+
+    return (
+        hide_style, show_style,
+        stats_display.to_dict('records'), stats_cols,
+        fig1, fig2, fig3, fig4
+    )
 
 
 @app.callback(
